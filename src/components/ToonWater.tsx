@@ -110,7 +110,7 @@ export function ToonWater({ size = 80, frozenTime, solo = 'none', off = [], over
       }),
       { collapsed: true },
     ),
-    Animation: folder(bind(u, { scroll: {}, evolveSpeed: { min: 0, max: 2, step: 0.01 } })),
+    Animation: folder(bind(u, { scroll: {}, evolveSpeed: { min: 0, max: 2, step: 0.01 }, cellMotion: { min: 0, max: 10, step: 0.05 } })),
     Base: folder(bind(u, { baseNoiseScale: { min: 0, max: 1, step: 0.01 }, baseNoiseAmount: { min: 0, max: 1, step: 0.01 } }), { collapsed: true }),
     Pixelate: folder(bind(u, { pixelGrid: { min: 1, max: 40, step: 0.5 }, pixelAngle: { min: -3.14, max: 3.14, step: 0.01 } })),
     Voronoi: folder(

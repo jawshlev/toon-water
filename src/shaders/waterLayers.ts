@@ -9,7 +9,10 @@ import {
   vec3,
   float,
   floor,
+  fract,
   mod,
+  min,
+  max,
   length,
   sqrt,
   mix,
@@ -19,7 +22,6 @@ import {
   cos,
   sin,
   positionWorld,
-  mx_worley_noise_vec2,
   mx_fractal_noise_vec3,
   mx_noise_float,
 } from 'three/tsl'
@@ -45,7 +47,8 @@ export function createWaterUniforms() {
 
     // animation
     scroll: uniform(new Vector2(0.3, 0.6)), // world units / s, drift toward camera
-    evolveSpeed: uniform(0.2), // voronoi W (z) speed
+    evolveSpeed: uniform(0.2), // voronoi evolution clock speed
+    cellMotion: uniform(1.8), // how far voronoi points travel per unit of evolution time (2D voronoi)
 
     // base variation
     baseNoiseScale: uniform(0.18),
@@ -136,13 +139,12 @@ const rotate2 = (p: Node, a: Node) => {
   return vec2(p.x.mul(c).sub(p.y.mul(s)), p.x.mul(s).add(p.y.mul(c)))
 }
 
-// 3D voronoi (time as z) -> vec2(F1, F2 - F1). mx_worley_noise_vec2 returns
-// squared euclidean distances, so take the sqrt first.
-const voronoi = Fn(([p, w]: [Node, Node]) => {
-  const f = sqrt(mx_worley_noise_vec2(vec3(p, w), 1.0))
-  return vec2(f.x, f.y.sub(f.x))
-})
-const voronoiEdge = Fn(([p, w]: [Node, Node]) => voronoi(p, w).y)
+// Cheap per-cell hash, vec2 -> vec2 in 0..1 (Dave Hoskins' hash22): arithmetic only, no noise call.
+const hash22 = (c: Node) => {
+  const p3 = fract(vec3(c.x, c.y, c.x).mul(vec3(0.1031, 0.103, 0.0973))).toVar()
+  p3.addAssign(p3.dot(p3.yzx.add(33.33)))
+  return fract(p3.xx.add(p3.yz).mul(p3.zy))
+}
 
 
 // ---------------------------------------------------------------------------
@@ -152,6 +154,33 @@ export function createWaterGraph(u: WaterUniforms) {
   const t = u.time
   const w = t.mul(u.evolveSpeed).mul(u.fxEvolve)
   const wh = w.mul(u.htEvolve) // halftone's own evolution clock
+
+  /**
+   * 2D voronoi with moving points -> vec2(F1, F2 - F1). Each cell's feature point
+   * orbits inside its cell (phase from the cell hash, speed from wt * cellMotion),
+   * so cells evolve over time. Only the 3x3 neighbourhood is searched (lean pass 2:
+   * 9 cells instead of the 27 of a 3D voronoi with time as z).
+   */
+  const voronoi = Fn(([p, wt]: [Node, Node]) => {
+    const cell = floor(p)
+    const f = fract(p)
+    const phase = wt.mul(u.cellMotion)
+    // unrolled 3x3 search keeping the two smallest distances (branch-free min/max)
+    let d1: Node = float(8)
+    let d2: Node = float(8)
+    for (let j = -1; j <= 1; j++) {
+      for (let i = -1; i <= 1; i++) {
+        const o = vec2(i, j)
+        const h = hash22(cell.add(o))
+        const pt = o.add(sin(h.mul(6.2831853).add(phase)).mul(0.45).add(0.5))
+        const d = length(pt.sub(f))
+        d2 = min(d2, max(d1, d))
+        d1 = min(d1, d)
+      }
+    }
+    return vec2(d1, d2.sub(d1))
+  })
+  const voronoiEdge = Fn(([p, wt]: [Node, Node]) => voronoi(p, wt).y)
 
   /**
    * Domain warp with 2-octave 3D perlin. Returns vec3(warped.xy, n.z): xy warps the
