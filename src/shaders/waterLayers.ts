@@ -68,6 +68,14 @@ export function createWaterUniforms() {
     edgePale: uniform(0.075),
     edgeGlow: uniform(0.11),
     edgeFade: uniform(0.17),
+    // bubble rings: swap the F2-F1 web for rings around each feature point
+    bubbleMix: uniform(0), // 0 = web, 1 = bubble rings
+    bubbleRadius: uniform(0.3), // ring radius in cell units (keep <= 0.5: 3x3 search)
+    bubbleRadiusVar: uniform(0.4), // per-cell radius variation
+    bubbleDensity: uniform(1), // fraction of cells that get a bubble
+    bubbleMerge: uniform(0.15), // smooth-min k: touching rings fuse into one outline
+    bubbleGradient: uniform(1), // 0 = thin ring on the rim, 1 = radial gradient filling the bubble
+    bubbleInvert: uniform(0), // gradient direction: 0 = white rim fading in to the centre, 1 = white centre fading out to the rim
     // dark ring = the ribbon's own shadow: its glow mask evaluated at an offset
     ringOffset: uniform(new Vector2(0.05, 0.22)),
     ringWidth: uniform(0.145), // edge distance treated as "ribbon" for the shadow
@@ -178,26 +186,42 @@ export function createWaterGraph(u: WaterUniforms) {
    * orbits inside its cell (phase from the cell hash, speed from wt * cellMotion),
    * so cells evolve over time. Only the 3x3 neighbourhood is searched (lean pass 2:
    * 9 cells instead of the 27 of a 3D voronoi with time as z).
+   * withBubbles adds z = smooth union of per-cell circles (d - r), signed: 0 on a bubble rim.
    */
-  const voronoi = Fn(([p, wt]: [Node, Node]) => {
-    const cell = floor(p)
-    const f = fract(p)
-    const phase = wt.mul(u.cellMotion)
-    // unrolled 3x3 search keeping the two smallest distances (branch-free min/max)
-    let d1: Node = float(8)
-    let d2: Node = float(8)
-    for (let j = -1; j <= 1; j++) {
-      for (let i = -1; i <= 1; i++) {
-        const o = vec2(i, j)
-        const h = hash22(cell.add(o))
-        const pt = o.add(sin(h.mul(6.2831853).add(phase)).mul(0.45).add(0.5))
-        const d = length(pt.sub(f))
-        d2 = min(d2, max(d1, d))
-        d1 = min(d1, d)
+  const makeVoronoi = (withBubbles: boolean) =>
+    Fn(([p, wt]: [Node, Node]): Node => {
+      const cell = floor(p)
+      const f = fract(p)
+      const phase = wt.mul(u.cellMotion)
+      const k = u.bubbleMerge.max(1e-4)
+      // unrolled 3x3 search keeping the two smallest distances (branch-free min/max)
+      let d1: Node = float(8)
+      let d2: Node = float(8)
+      let blob: Node = float(8)
+      for (let j = -1; j <= 1; j++) {
+        for (let i = -1; i <= 1; i++) {
+          const o = vec2(i, j)
+          const h = hash22(cell.add(o))
+          const pt = o.add(sin(h.mul(6.2831853).add(phase)).mul(0.45).add(0.5))
+          const d = length(pt.sub(f))
+          d2 = min(d2, max(d1, d))
+          d1 = min(d1, d)
+          if (withBubbles) {
+            // radius + on/off recycled from the same cell hash
+            const hr = fract(h.x.add(h.y).mul(17.13))
+            const hd = fract(h.x.mul(h.y).mul(91.7))
+            const r = u.bubbleRadius.mul(float(1).sub(u.bubbleRadiusVar.mul(hr)))
+            const sd = mix(float(8), d.sub(r), step(hd, u.bubbleDensity))
+            // polynomial smooth min
+            const hh = k.sub(blob.sub(sd).abs()).max(0).div(k)
+            blob = min(blob, sd).sub(hh.mul(hh).mul(k).mul(0.25))
+          }
+        }
       }
-    }
-    return vec2(d1, d2.sub(d1))
-  })
+      return withBubbles ? vec3(d1, d2.sub(d1), blob) : vec2(d1, d2.sub(d1))
+    })
+  const voronoi = makeVoronoi(false)
+  const voronoiBubbles = makeVoronoi(true)
   const voronoiEdge = Fn(([p, wt]: [Node, Node]) => voronoi(p, wt).y)
 
   /**
@@ -233,7 +257,14 @@ export function createWaterGraph(u: WaterUniforms) {
   /** Ribbon voronoi edge distance, on pixelated + warped coords. */
   const ribbonEdge = Fn(([pq]: [Node]) => {
     const pw = warp(pq, u.distortFreq, u.distortStrength, w.mul(0.5)).xy
-    return voronoiEdge(pw.mul(u.voronoiScale), w)
+    const v = voronoiBubbles(pw.mul(u.voronoiScale), w)
+    // radial gradient: g = 0 on the rim -> 1 at the centre, mapped onto the ramp's
+    // 0..edgeFade range so the existing colour bands run across the bubble; outside = uncovered
+    const g = v.z.negate().div(u.bubbleRadius).clamp(0, 1)
+    const gDir = mix(g, float(1).sub(g), u.bubbleInvert)
+    const radial = select(v.z.lessThan(0), gDir.mul(u.edgeFade), u.edgeFade.add(1))
+    const bubble = mix(v.z.abs(), radial, u.bubbleGradient)
+    return mix(v.y, bubble, u.bubbleMix)
   })
 
   /**

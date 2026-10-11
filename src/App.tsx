@@ -15,6 +15,8 @@ const frozenTime = params.has('t') ? Number(params.get('t')) : undefined
 const soloParam = params.get('solo') as Layer | null
 const solo = soloParam && (LAYERS as readonly string[]).includes(soloParam) ? soloParam : 'none'
 const showUi = params.get('ui') !== '0'
+// ?preset=bubbles starts from a saved look (src/presets.ts)
+const preset = params.get('preset') ?? 'default'
 // ?off=ring,clip starts those layers / effects switched off
 const off = (params.get('off') ?? '').split(',').filter(Boolean)
 // ?set=htInterpolate:0.5,htFreq:3 seeds numeric uniforms
@@ -42,7 +44,7 @@ export default function App() {
           return renderer
         }}
       >
-        <ToonWater frozenTime={frozenTime} solo={solo} off={off} overrides={overrides} />
+        <ToonWater frozenTime={frozenTime} solo={solo} off={off} overrides={overrides} preset={preset} />
         <OrbitControls target={TARGET} enableDamping={false} />
       </Canvas>
     </>
