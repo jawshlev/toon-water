@@ -8,8 +8,8 @@ const query = process.argv[3] ?? ''
 const browser = await chromium.launch({
   args: ['--enable-unsafe-webgpu', '--use-angle=d3d11', '--ignore-gpu-blocklist', '--disable-gpu-vsync', '--disable-frame-rate-limit'],
 })
-const page = await browser.newPage({ viewport: { width: 1440, height: 1080 }, deviceScaleFactor: Number(process.env.DPR ?? 2) })
-await page.goto(`http://localhost:${process.env.PORT ?? 5173}/?ui=0&${query}`)
+const page = await browser.newPage({ viewport: { width: 1440, height: 1080 }, deviceScaleFactor: Number(process.env.DPR ?? 2), ignoreHTTPSErrors: true })
+await page.goto(`https://localhost:${process.env.PORT ?? 5173}/?ui=0&${query}`)
 await page.waitForSelector('canvas')
 await page.waitForTimeout(Number(process.env.WARMUP ?? 3000)) // shader compile + warm-up
 const r = await page.evaluate(
