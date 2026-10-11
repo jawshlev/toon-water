@@ -24,7 +24,7 @@ import {
   positionWorld,
   texture,
 } from 'three/tsl'
-import { createNoiseTexture, NOISE_CELLS } from './noiseTexture'
+import { getNoiseTexture, NOISE_CELLS } from './noiseTexture'
 
 type Node = any // TSL node typing is loose; keep the graph readable instead
 
@@ -163,7 +163,7 @@ export function createWaterGraph(u: WaterUniforms) {
    * time as z. Returns vec4: rgb = 2-octave fractal (independent), a = 1-octave.
    * q is in noise-cell units (one feature per unit), like the old mx_* coords.
    */
-  const noiseTex = createNoiseTexture()
+  const noiseTex = getNoiseTexture()
   const sampleNoise = Fn(([q, wz]: [Node, Node]) => {
     const uv = q.div(NOISE_CELLS)
     wz = wz.mul(u.noiseSpeed)
