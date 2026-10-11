@@ -300,13 +300,13 @@ export function createWaterGraph(u: WaterUniforms) {
   })
 
   /**
-   * The voronoi shape the halftone fills, per pixel: the field region, hard-clipped
-   * when the clip effect is on. This stays fixed while the morph changes, so solid
-   * and dotted versions share one outline.
+   * The voronoi shape the halftone fills, decided per dot from the field already
+   * sampled at the dot centre (f), hard-clipped when the clip effect is on. Reusing
+   * the centre sample (lean pass 1) saves a per-pixel warp + voronoi; the outline
+   * follows the dot lattice instead of a smooth curve.
    */
-  const halftoneShape = Fn(([p, widen]: [Node, Node]) => {
-    const f = halftoneField(p, widen).x
-    const clipN = mx_noise_float(vec3(p.mul(2.2), wh)).mul(u.htClipNoise)
+  const halftoneShape = Fn(([centre, f]: [Node, Node]) => {
+    const clipN = mx_noise_float(vec3(centre.mul(2.2), wh)).mul(u.htClipNoise)
     const clip = step(u.htClip, f.add(clipN))
     return step(0.001, f).mul(mix(float(1), clip, u.fxClip))
   })
@@ -320,7 +320,7 @@ export function createWaterGraph(u: WaterUniforms) {
     const fc = halftoneField(lat.yz, 0)
     const m = morphAt(lat.yz, fc.y)
     const dots = step(lat.x, dotRadius(fc.x, m).mul(presenceAt(lat.yz)))
-    return vec2(dots.mul(halftoneShape(p, 0)), m)
+    return vec2(dots.mul(halftoneShape(lat.yz, fc.x)), m)
   })
 
   /** Shadow: same halftone at an offset (so it morphs with the dot casting it), soft-edged. */
@@ -332,7 +332,7 @@ export function createWaterGraph(u: WaterUniforms) {
     const radius = dotRadius(fc.x, m).mul(presenceAt(lat.yz))
     // softness fades out as the dot morphs to solid, so a solid shadow has no lattice texture
     const soft = u.shadowSoftness.mul(m)
-    return smoothstep(radius, radius.sub(soft).sub(0.0001), lat.x).mul(halftoneShape(ps, u.shadowSpread))
+    return smoothstep(radius, radius.sub(soft).sub(0.0001), lat.x).mul(halftoneShape(lat.yz, fc.x))
   })
 
   // -------------------------------------------------------------------------
