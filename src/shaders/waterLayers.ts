@@ -347,13 +347,14 @@ export function createWaterGraph(u: WaterUniforms) {
   })
 
   /**
-   * The voronoi shape the halftone fills, decided per dot from the field already
-   * sampled at the dot centre (f), hard-clipped when the clip effect is on. Reusing
-   * the centre sample (lean pass 1) saves a per-pixel warp + voronoi; the outline
-   * follows the dot lattice instead of a smooth curve.
+   * The voronoi shape the halftone fills, evaluated per pixel: the field region,
+   * hard-clipped when the clip effect is on. Per-pixel (not per dot) so the outline
+   * is a smooth curve and merged dots form fluid shapes rather than hex blocks;
+   * this stays fixed while the morph changes, so solid and dotted share one outline.
    */
-  const halftoneShape = Fn(([centre, f]: [Node, Node]) => {
-    const clipN = sampleNoise(centre.mul(2.2).add(5.3), wh).w.mul(u.htClipNoise)
+  const halftoneShape = Fn(([p, widen]: [Node, Node]) => {
+    const f = halftoneField(p, widen).x
+    const clipN = sampleNoise(p.mul(2.2).add(5.3), wh).w.mul(u.htClipNoise)
     const clip = step(u.htClip, f.add(clipN))
     return step(0.001, f).mul(mix(float(1), clip, u.fxClip))
   })
@@ -367,7 +368,7 @@ export function createWaterGraph(u: WaterUniforms) {
     const fc = halftoneField(lat.yz, 0)
     const m = morphAt(lat.yz, fc.y)
     const dots = step(lat.x, dotRadius(fc.x, m).mul(presenceAt(lat.yz)))
-    return vec2(dots.mul(halftoneShape(lat.yz, fc.x)), m)
+    return vec2(dots.mul(halftoneShape(p, 0)), m)
   })
 
   /** Shadow: same halftone at an offset (so it morphs with the dot casting it), soft-edged. */
@@ -379,7 +380,7 @@ export function createWaterGraph(u: WaterUniforms) {
     const radius = dotRadius(fc.x, m).mul(presenceAt(lat.yz))
     // softness fades out as the dot morphs to solid, so a solid shadow has no lattice texture
     const soft = u.shadowSoftness.mul(m)
-    return smoothstep(radius, radius.sub(soft).sub(0.0001), lat.x).mul(halftoneShape(lat.yz, fc.x))
+    return smoothstep(radius, radius.sub(soft).sub(0.0001), lat.x).mul(halftoneShape(ps, u.shadowSpread))
   })
 
   // -------------------------------------------------------------------------
