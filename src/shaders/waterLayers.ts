@@ -69,7 +69,7 @@ export function createWaterUniforms() {
     ringOpacity: uniform(0.7),
 
     // halftone
-    htFreq: uniform(6), // dots per world unit
+    htFreq: uniform(6.56), // dots per world unit
     htAngle: uniform(0.35), // radians
     htRadiusMax: uniform(0), // dot radius at morph = 1, in units of dot spacing (0 = dots vanish; > 0.577 merges)
 
@@ -81,7 +81,7 @@ export function createWaterUniforms() {
     htEvolve: uniform(0.17), // halftone-only cell evolution speed (x evolveSpeed); ribbons unaffected
     morphNoiseAmount: uniform(0.35), // noise phase offset in cycles (0 = whole plane in sync)
     morphNoiseGain: uniform(1.5), // stretches the narrow perlin range toward 0..1
-    morphWaveFreq: uniform(0), // travelling-wave bands per world unit (0 = no bands)
+    morphWaveFreq: uniform(0.21), // travelling-wave bands per world unit (0 = no bands)
     morphWaveAngle: uniform(0.6), // direction the bands travel (radians)
     morphContrast: uniform(1), // > 1 = areas hold solid / hold dots longer, then snap
     morphMin: uniform(0), // morph range: 0 = solid, 1 = dots (htRadiusMax)
