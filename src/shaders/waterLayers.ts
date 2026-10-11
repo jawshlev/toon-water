@@ -22,9 +22,9 @@ import {
   cos,
   sin,
   positionWorld,
-  mx_fractal_noise_vec3,
-  mx_noise_float,
+  texture,
 } from 'three/tsl'
+import { createNoiseTexture, NOISE_CELLS } from './noiseTexture'
 
 type Node = any // TSL node typing is loose; keep the graph readable instead
 
@@ -48,6 +48,8 @@ export function createWaterUniforms() {
     // animation
     scroll: uniform(new Vector2(0.3, 0.6)), // world units / s, drift toward camera
     evolveSpeed: uniform(0.2), // voronoi evolution clock speed
+    noiseSpeed: uniform(0.13), // how fast the baked noise scrolls/evolves (per unit of evolution time)
+    noiseGain: uniform(1.4), // scales every noise sample (calibrates the baked noise texture)
     cellMotion: uniform(1.8), // how far voronoi points travel per unit of evolution time (2D voronoi)
 
     // base variation
@@ -156,6 +158,22 @@ export function createWaterGraph(u: WaterUniforms) {
   const wh = w.mul(u.htEvolve) // halftone's own evolution clock
 
   /**
+   * Noise lookup (lean pass 3): two reads of the baked tileable noise texture,
+   * scrolled in different directions by wz and summed, stand in for 3D noise with
+   * time as z. Returns vec4: rgb = 2-octave fractal (independent), a = 1-octave.
+   * q is in noise-cell units (one feature per unit), like the old mx_* coords.
+   */
+  const noiseTex = createNoiseTexture()
+  const sampleNoise = Fn(([q, wz]: [Node, Node]) => {
+    const uv = q.div(NOISE_CELLS)
+    wz = wz.mul(u.noiseSpeed)
+    const a = texture(noiseTex, uv.add(vec2(wz.mul(0.125), 0)))
+    const qr = vec2(q.x.mul(0.54).sub(q.y.mul(0.84)), q.x.mul(0.84).add(q.y.mul(0.54))) // ~1 rad rotation
+    const b = texture(noiseTex, qr.div(NOISE_CELLS).add(vec2(0.37, 0.61)).add(vec2(wz.mul(-0.06), wz.mul(0.11))))
+    return a.add(b).mul(0.7071).mul(u.noiseGain)
+  })
+
+  /**
    * 2D voronoi with moving points -> vec2(F1, F2 - F1). Each cell's feature point
    * orbits inside its cell (phase from the cell hash, speed from wt * cellMotion),
    * so cells evolve over time. Only the 3x3 neighbourhood is searched (lean pass 2:
@@ -187,7 +205,7 @@ export function createWaterGraph(u: WaterUniforms) {
    * coordinate, z is a spare independent noise channel that callers can recycle.
    */
   const warp = Fn(([p, freq, strength, wz]: [Node, Node, Node, Node]) => {
-    const n = mx_fractal_noise_vec3(vec3(p.mul(freq), wz), 2, 2.0, 0.5)
+    const n = sampleNoise(p.mul(freq), wz).xyz
     return vec3(p.add(n.xy.mul(strength).mul(u.fxWarp)), n.z)
   })
 
@@ -206,7 +224,7 @@ export function createWaterGraph(u: WaterUniforms) {
 
   /** Bottom: solid blue with a slow, soft darker variation. */
   const baseColor = Fn(([p]: [Node]) => {
-    const n = mx_noise_float(vec3(p.mul(u.baseNoiseScale), w.mul(0.3))).mul(0.5).add(0.5)
+    const n = sampleNoise(p.mul(u.baseNoiseScale), w.mul(0.3)).w.mul(0.5).add(0.5)
     const deep = smoothstep(0.45, 0.85, n).mul(u.baseNoiseAmount)
     const col = mix(u.baseColor, u.baseDeepColor, deep)
     return mix(col, vec3(0.5), u.soloBg)
@@ -304,7 +322,7 @@ export function createWaterGraph(u: WaterUniforms) {
    * patch edge shrink away rather than being cut. With htPresence = 1 it is exactly 1.
    */
   const presenceAt = Fn(([c]: [Node]) => {
-    const n = float(0.5).add(mx_noise_float(vec3(c.mul(u.htPresenceScale), wh.mul(0.3).add(11.0))).mul(0.75)).clamp(0, 1)
+    const n = float(0.5).add(sampleNoise(c.mul(u.htPresenceScale).add(11.0), wh.mul(0.3)).w.mul(0.75)).clamp(0, 1)
     const s = u.htPresenceSoftness.max(0.001)
     const th = float(1).sub(u.htPresence).mul(s.add(1)).sub(s)
     return smoothstep(th, th.add(s), n)
@@ -335,7 +353,7 @@ export function createWaterGraph(u: WaterUniforms) {
    * follows the dot lattice instead of a smooth curve.
    */
   const halftoneShape = Fn(([centre, f]: [Node, Node]) => {
-    const clipN = mx_noise_float(vec3(centre.mul(2.2), wh)).mul(u.htClipNoise)
+    const clipN = sampleNoise(centre.mul(2.2).add(5.3), wh).w.mul(u.htClipNoise)
     const clip = step(u.htClip, f.add(clipN))
     return step(0.001, f).mul(mix(float(1), clip, u.fxClip))
   })
