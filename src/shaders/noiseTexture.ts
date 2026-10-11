@@ -74,17 +74,5 @@ export function createNoiseTexture(size = 256) {
   tex.magFilter = tex.minFilter = LinearFilter
   tex.generateMipmaps = false
   tex.needsUpdate = true
-  console.debug('[toon-water] noise texture created')
   return tex
-}
-
-let shared: DataTexture | null = null
-
-/**
- * The one noise texture every water material shares. Created on first use, so
- * remounts, hot reloads and multiple water meshes don't each allocate 512 KB.
- */
-export function getNoiseTexture() {
-  shared ??= createNoiseTexture()
-  return shared
 }
