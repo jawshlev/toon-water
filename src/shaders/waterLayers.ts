@@ -35,7 +35,7 @@ export function createWaterUniforms() {
   return {
     time: uniform(0),
 
-    // colours (sampled from water.mp4, see water-analysis/ANALYSIS.md)
+    // colours (sampled from water.mp4, see assets/water-analysis/ANALYSIS.md)
     baseColor: uniform(new Color('#5ECCF8')),
     baseDeepColor: uniform(new Color('#53A4F3')),
     glowColor: uniform(new Color('#9CE4F5')),

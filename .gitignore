@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Reference media and analysis frames (large; ANALYSIS.md and the prompt stay tracked)
+assets/*.mp4
+assets/water-analysis/**/*.png
